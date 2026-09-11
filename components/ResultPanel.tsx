@@ -1,104 +1,135 @@
-import {
-  Alert,
-  Box,
-  Chip,
-  Divider,
-  Grid,
-  LinearProgress,
-  Paper,
-  Stack,
-  Typography,
-} from "@mui/material";
-import AccountTreeRoundedIcon from "@mui/icons-material/AccountTreeRounded";
-import BoltRoundedIcon from "@mui/icons-material/BoltRounded";
-import CategoryRoundedIcon from "@mui/icons-material/CategoryRounded";
-import FlagRoundedIcon from "@mui/icons-material/FlagRounded";
+import { Box, Chip, Divider, LinearProgress, Paper, Stack, Typography } from "@mui/material";
+import ArrowForwardRoundedIcon from "@mui/icons-material/ArrowForwardRounded";
+import WarningAmberRoundedIcon from "@mui/icons-material/WarningAmberRounded";
+import type { ReactNode } from "react";
 import type { AnalysisResult } from "@/lib/types";
-import { MetricCard } from "./MetricCard";
 
 function confidencePercent(value: number) {
   return Math.max(0, Math.min(100, value <= 1 ? Math.round(value * 100) : Math.round(value)));
 }
 
+// Label left, value right; stacks on narrow screens.
+function Row({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <Box sx={{ display: "flex", flexDirection: { xs: "column", sm: "row" }, gap: { xs: 0.4, sm: 3 } }}>
+      <Typography variant="body2" color="text.secondary" sx={{ width: { sm: 104 }, flexShrink: 0, pt: 0.2 }}>
+        {label}
+      </Typography>
+      <Box sx={{ minWidth: 0 }}>{children}</Box>
+    </Box>
+  );
+}
+
 export function ResultPanel({ result }: { result: AnalysisResult }) {
-  const confidence = confidencePercent(result.classification.confidence);
-  const identifiers = Object.entries(result.enrichment.identifiers ?? {});
+  const { classification, enrichment, routing, escalation } = result;
+  const identifiers = Object.entries(enrichment.identifiers ?? {});
+  const confidence = confidencePercent(classification.confidence);
+  const priorityColor =
+    classification.priority === "High" ? "error" : classification.priority === "Medium" ? "warning" : "default";
 
   return (
-    <Paper elevation={0} sx={{ p: { xs: 2, md: 3 }, border: "1px solid", borderColor: "divider", borderRadius: 4 }}>
-      <Stack spacing={2.5}>
-        <Box>
-          <Typography variant="h6" fontWeight={800}>Analysis Result</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Structured output returned by the AI triage workflow.
-          </Typography>
+    <Paper variant="outlined" sx={{ overflow: "hidden" }}>
+      {/* Headline: what it is, how urgent, and where it goes. */}
+      <Box sx={{ p: { xs: 2, md: 3 }, bgcolor: "rgba(79,70,229,0.03)" }}>
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          spacing={2}
+          justifyContent="space-between"
+          alignItems={{ sm: "center" }}
+        >
+          <Box>
+            <Typography variant="caption" color="text.secondary">
+              Category
+            </Typography>
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.4 }}>
+              <Typography variant="h6">{classification.category}</Typography>
+              <Chip size="small" label={classification.priority} color={priorityColor} />
+            </Stack>
+          </Box>
+
+          <Stack direction="row" spacing={0.8} alignItems="center" color="text.secondary">
+            <ArrowForwardRoundedIcon fontSize="small" />
+            <Typography fontWeight={600} color="text.primary">
+              {routing.destination}
+            </Typography>
+          </Stack>
+        </Stack>
+
+        <Box sx={{ mt: 2.5, maxWidth: 260 }}>
+          <Stack direction="row" justifyContent="space-between">
+            <Typography variant="caption" color="text.secondary">
+              Confidence
+            </Typography>
+            <Typography variant="caption" fontWeight={700}>
+              {confidence}%
+            </Typography>
+          </Stack>
+          <LinearProgress
+            variant="determinate"
+            value={confidence}
+            sx={{ mt: 0.6, height: 5, borderRadius: 5, bgcolor: "rgba(79,70,229,0.12)" }}
+          />
         </Box>
+      </Box>
 
-        <Grid container spacing={1.5}>
-          <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-            <MetricCard label="Category" value={<Typography fontWeight={800}>{result.classification.category}</Typography>} icon={<CategoryRoundedIcon />} />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-            <MetricCard
-              label="Priority"
-              value={<Chip size="small" label={result.classification.priority} color={result.classification.priority === "High" ? "error" : result.classification.priority === "Medium" ? "warning" : "default"} />}
-              icon={<BoltRoundedIcon />}
-            />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-            <MetricCard
-              label="Confidence"
-              value={
-                <Box sx={{ minWidth: 130 }}>
-                  <Typography fontWeight={800}>{confidence}%</Typography>
-                  <LinearProgress variant="determinate" value={confidence} sx={{ mt: 0.8, height: 7, borderRadius: 10 }} />
-                </Box>
-              }
-              icon={<FlagRoundedIcon />}
-            />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-            <MetricCard label="Destination" value={<Typography fontWeight={800}>{result.routing.destination}</Typography>} icon={<AccountTreeRoundedIcon />} />
-          </Grid>
-        </Grid>
+      {escalation.required && (
+        <Stack
+          direction="row"
+          spacing={1.2}
+          sx={{
+            px: { xs: 2, md: 3 },
+            py: 1.6,
+            bgcolor: "rgba(211,47,47,0.06)",
+            color: "error.dark",
+            borderTop: "1px solid",
+            borderColor: "rgba(211,47,47,0.18)",
+          }}
+        >
+          <WarningAmberRoundedIcon fontSize="small" sx={{ mt: 0.2 }} />
+          <Box>
+            <Typography variant="body2" fontWeight={700}>
+              Human escalation required
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {escalation.reason || "Flagged for manual review."}
+            </Typography>
+          </Box>
+        </Stack>
+      )}
 
-        {result.escalation.required ? (
-          <Alert severity="error" variant="outlined">
-            <strong>Human escalation required.</strong> {result.escalation.reason || "The workflow marked this request for manual review."}
-          </Alert>
-        ) : (
-          <Alert severity="success" variant="outlined">No human escalation is required for this request.</Alert>
-        )}
+      <Divider />
 
-        <Divider />
+      <Stack spacing={2} sx={{ p: { xs: 2, md: 3 } }}>
+        <Row label="Core issue">
+          <Typography>{enrichment.coreIssue}</Typography>
+        </Row>
 
-        <Box>
-          <Typography variant="subtitle2" color="text.secondary" fontWeight={800}>CORE ISSUE</Typography>
-          <Typography sx={{ mt: 0.7 }}>{result.enrichment.coreIssue}</Typography>
-        </Box>
+        {/* The workflow sends urgency as a sentence; fall back to the level when it doesn't. */}
+        <Row label="Urgency">
+          <Typography>{enrichment.urgencySignal || enrichment.urgency}</Typography>
+        </Row>
 
-        <Box>
-          <Typography variant="subtitle2" color="text.secondary" fontWeight={800}>EXTRACTED ENTITIES</Typography>
+        <Row label="Entities">
           {identifiers.length ? (
-            <Stack direction="row" useFlexGap flexWrap="wrap" spacing={1} sx={{ mt: 1 }}>
+            <Stack direction="row" useFlexGap flexWrap="wrap" spacing={0.8}>
               {identifiers.map(([key, value]) => (
-                <Chip key={key} variant="outlined" label={`${key}: ${String(value)}`} />
+                <Chip key={key} size="small" variant="outlined" label={`${key}: ${String(value)}`} />
               ))}
             </Stack>
           ) : (
-            <Typography color="text.secondary" sx={{ mt: 0.7 }}>No identifiers were found in the message.</Typography>
+            <Typography color="text.secondary">None found</Typography>
           )}
-        </Box>
+        </Row>
 
-        <Box>
-          <Typography variant="subtitle2" color="text.secondary" fontWeight={800}>URGENCY</Typography>
-          <Chip sx={{ mt: 1 }} label={result.enrichment.urgency} color={result.enrichment.urgency === "High" ? "error" : result.enrichment.urgency === "Medium" ? "warning" : "default"} />
-        </Box>
+        {!escalation.required && (
+          <Row label="Escalation">
+            <Typography color="text.secondary">Not required</Typography>
+          </Row>
+        )}
 
-        <Box sx={{ p: 2, backgroundColor: "action.hover", borderRadius: 3 }}>
-          <Typography variant="subtitle2" color="text.secondary" fontWeight={800}>RECEIVING-TEAM SUMMARY</Typography>
-          <Typography sx={{ mt: 0.7 }}>{result.summary}</Typography>
-        </Box>
+        <Row label="Summary">
+          <Typography>{result.summary}</Typography>
+        </Row>
       </Stack>
     </Paper>
   );

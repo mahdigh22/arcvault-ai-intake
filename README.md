@@ -18,10 +18,9 @@ A small Next.js + TypeScript + MUI frontend for the Valsoft AI Engineer assessme
   - Human escalation flag/reason
   - 2–3 sentence receiving-team summary
 - Local processed-request history for demo convenience
-- Mock mode so the UI works before n8n is ready
-- `/api/analyze` server route that forwards requests to n8n when enabled
+- `/api/analyze` server route that forwards every request to n8n
 
-## 1. Run it now in mock mode
+## 1. Run it
 
 ```bash
 npm install
@@ -29,67 +28,70 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open `http://localhost:3000`.
-
-The supplied `.env.example` starts with:
-
-```env
-USE_MOCK=true
-```
-
-So all five sample requests work immediately without n8n.
-
-## 2. Connect your n8n workflow
-
-When n8n is ready, edit `.env.local`:
-
-```env
-USE_MOCK=false
-N8N_WEBHOOK_URL=https://YOUR-N8N-HOST/webhook/arcvault-intake
-```
+Fill in `.env.local` with your webhook URL and credentials (see below), then open
+`http://localhost:3000`. Every analysis calls the live n8n workflow — there is no
+offline mode, so the workflow must be published and active.
 
 Restart `npm run dev` after changing environment variables.
 
-The frontend sends this JSON to n8n:
+## 2. Connect your n8n workflow
+
+```env
+N8N_WEBHOOK_URL=https://YOUR-N8N-HOST/webhook/arcvault-triage
+
+# Header Auth (must match the n8n credential byte-for-byte):
+N8N_WEBHOOK_HEADER=Authorization
+N8N_WEBHOOK_SECRET=Bearer <long-random-token>
+
+# ...or Basic Auth, which takes precedence when both are set:
+N8N_WEBHOOK_USER=
+N8N_WEBHOOK_PASSWORD=
+```
+
+If the header name and value do not match the n8n credential exactly, the webhook
+returns 403.
+
+The browser posts `{ source, message }` to `/api/analyze`, and that route forwards
+this JSON to n8n:
 
 ```json
 {
   "source": "Email",
-  "message": "Hi, I tried logging in this morning and keep getting a 403 error..."
+  "raw_message": "Hi, I tried logging in this morning and keep getting a 403 error..."
 }
 ```
 
 ## 3. Required n8n response contract
 
-Configure your final **Respond to Webhook** node to return one JSON object with this shape:
+Configure your final **Respond to Webhook** node to return one flat JSON object:
 
 ```json
 {
-  "classification": {
-    "category": "Bug Report",
-    "priority": "Medium",
-    "confidence": 0.95
-  },
-  "enrichment": {
-    "coreIssue": "Customer cannot log in and receives HTTP 403 after a recent update.",
-    "identifiers": {
-      "account": "arcvault.io/user/jsmith",
-      "errorCode": "403"
-    },
-    "urgency": "Medium"
-  },
-  "routing": {
-    "destination": "Engineering"
-  },
-  "escalation": {
-    "required": false,
-    "reason": null
-  },
-  "summary": "The customer is unable to authenticate after the latest update and receives HTTP 403. Engineering should investigate a possible authorization regression tied to the release."
+  "source": "Email",
+  "raw_message": "...",
+  "category": "Bug Report",
+  "priority": "Medium",
+  "confidence": 0.95,
+  "core_issue": "Customer cannot log in and receives HTTP 403 after a recent update.",
+  "identifiers": { "account": "arcvault.io/user/jsmith", "errorCode": "403" },
+  "urgency_signal": "Login has been blocked since the last release.",
+  "routing_queue": "Engineering",
+  "escalation_flag": false,
+  "escalation_reason": null,
+  "summary": "The customer is unable to authenticate after the latest update and receives HTTP 403. Engineering should investigate a possible authorization regression tied to the release.",
+  "processed_at": "2026-09-11T18:39:28.000Z"
 }
 ```
 
-The app also accepts a one-item n8n array (`[result]`) or `{ "data": result }`, but returning the object directly is cleaner.
+`/api/analyze` maps that to the nested camelCase shape in [`lib/types.ts`](lib/types.ts)
+before returning it to the browser. Notes on the tolerant bits:
+
+- `identifiers` may be an object, or `""` when nothing was extracted.
+- `urgency_signal` may be a free-text sentence or one of `Low`/`Medium`/`High`.
+  When it is a sentence, the urgency **level** falls back to `priority` and the
+  sentence is displayed underneath it.
+- The nested camelCase shape is still accepted, as is a one-item array (`[result]`)
+  or `{ "data": result }`.
 
 ### Allowed assessment values
 

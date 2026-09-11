@@ -1,38 +1,32 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
-  AppBar,
   Box,
   Button,
   Chip,
   CircularProgress,
   Container,
   CssBaseline,
-  Divider,
-  FormControl,
-  Grid,
-  InputLabel,
   MenuItem,
   Paper,
-  Select,
   Stack,
   Tab,
   Tabs,
   TextField,
-  Toolbar,
+  ThemeProvider,
   Typography,
 } from "@mui/material";
 import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
-import ScienceRoundedIcon from "@mui/icons-material/ScienceRounded";
-import SendRoundedIcon from "@mui/icons-material/SendRounded";
+import { theme } from "./theme";
 import { sampleRequests } from "@/lib/sampleRequests";
 import type { AnalysisResult, HistoryItem, Source } from "@/lib/types";
 import { ResultPanel } from "@/components/ResultPanel";
-import { HistoryTable } from "@/components/HistoryTable";
+import { HistoryList } from "@/components/HistoryList";
 
 const HISTORY_KEY = "arcvault-analysis-history";
+const SOURCES: Source[] = ["Email", "Web Form", "Support Portal"];
 
 export default function HomePage() {
   const [source, setSource] = useState<Source>("Email");
@@ -52,7 +46,7 @@ export default function HomePage() {
     }
   }, []);
 
-  const canSubmit = useMemo(() => message.trim().length >= 5 && !loading, [message, loading]);
+  const canSubmit = message.trim().length >= 5 && !loading;
 
   function selectSample(index: number) {
     const sample = sampleRequests[index];
@@ -60,7 +54,6 @@ export default function HomePage() {
     setMessage(sample.message);
     setResult(null);
     setError(null);
-    setTab(0);
   }
 
   async function analyze() {
@@ -102,153 +95,140 @@ export default function HomePage() {
   }
 
   return (
-    <>
+    <ThemeProvider theme={theme}>
       <CssBaseline />
-      <AppBar position="static" elevation={0} color="transparent" sx={{ borderBottom: "1px solid", borderColor: "divider", backdropFilter: "blur(14px)", backgroundColor: "rgba(248,250,255,0.78)" }}>
-        <Toolbar>
-          <AutoAwesomeRoundedIcon color="primary" />
-          <Typography variant="h6" fontWeight={900} sx={{ ml: 1 }}>ArcVault AI Intake</Typography>
-          <Chip size="small" label="Assessment Demo" variant="outlined" sx={{ ml: 1.5 }} />
-        </Toolbar>
-      </AppBar>
+      <Container maxWidth="md" sx={{ py: { xs: 4, md: 7 } }}>
+        <Stack direction="row" spacing={1.5} alignItems="center">
+          <Box
+            sx={{
+              width: 38,
+              height: 38,
+              borderRadius: 2,
+              display: "grid",
+              placeItems: "center",
+              color: "primary.main",
+              backgroundImage: "linear-gradient(140deg, rgba(79,70,229,0.16), rgba(79,70,229,0.05))",
+              border: "1px solid",
+              borderColor: "rgba(79,70,229,0.18)",
+            }}
+          >
+            <AutoAwesomeRoundedIcon fontSize="small" />
+          </Box>
+          <Box>
+            <Typography variant="h5" component="h1">
+              ArcVault AI Intake
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Classify, route and escalate customer requests automatically.
+            </Typography>
+          </Box>
+        </Stack>
 
-      <Container maxWidth="xl" sx={{ py: { xs: 3, md: 5 } }}>
-        <Box sx={{ maxWidth: 850, mb: 4 }}>
-          <Typography variant="h3" component="h1" fontWeight={900} sx={{ fontSize: { xs: 34, md: 48 }, letterSpacing: -1.5 }}>
-            AI-powered request triage, without the manual sorting.
-          </Typography>
-          <Typography color="text.secondary" sx={{ mt: 1.5, fontSize: 18 }}>
-            Submit an unstructured customer request. The workflow classifies it, extracts key entities, routes it, and decides whether human escalation is required.
-          </Typography>
-        </Box>
+        <Tabs
+          value={tab}
+          onChange={(_, value) => setTab(value)}
+          sx={{ mt: 4, borderBottom: "1px solid", borderColor: "divider" }}
+        >
+          <Tab label="Analyze" />
+          <Tab label={`History (${history.length})`} />
+        </Tabs>
 
-        <Paper elevation={0} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 4, mb: 3 }}>
-          <Tabs value={tab} onChange={(_, value) => setTab(value)} sx={{ px: 2, pt: 1 }}>
-            <Tab label="Analyze Request" />
-            <Tab label={`Processed Requests (${history.length})`} />
-          </Tabs>
-          <Divider />
-
+        <Box sx={{ mt: 3 }}>
           {tab === 0 ? (
-            <Box sx={{ p: { xs: 2, md: 3 } }}>
-              <Grid container spacing={3}>
-                <Grid size={{ xs: 12, lg: 5 }}>
-                  <Stack spacing={2.2}>
-                    <Box>
-                      <Typography variant="h6" fontWeight={800}>New customer request</Typography>
-                      <Typography variant="body2" color="text.secondary">Use any request or load one of the five assessment samples.</Typography>
-                    </Box>
+            <Stack spacing={2.5}>
+              <Paper variant="outlined" sx={{ p: { xs: 2, md: 3 } }}>
+                <Stack spacing={2.5}>
+                  <TextField
+                    select
+                    label="Source"
+                    value={source}
+                    onChange={(event) => setSource(event.target.value as Source)}
+                    sx={{ maxWidth: 220 }}
+                  >
+                    {SOURCES.map((option) => (
+                      <MenuItem key={option} value={option}>
+                        {option}
+                      </MenuItem>
+                    ))}
+                  </TextField>
 
-                    <FormControl fullWidth>
-                      <InputLabel>Source</InputLabel>
-                      <Select value={source} label="Source" onChange={(event) => setSource(event.target.value as Source)}>
-                        <MenuItem value="Email">Email</MenuItem>
-                        <MenuItem value="Web Form">Web Form</MenuItem>
-                        <MenuItem value="Support Portal">Support Portal</MenuItem>
-                      </Select>
-                    </FormControl>
+                  <TextField
+                    label="Customer message"
+                    value={message}
+                    onChange={(event) => setMessage(event.target.value)}
+                    multiline
+                    minRows={6}
+                    placeholder="Paste the customer request here..."
+                    fullWidth
+                  />
 
-                    <TextField
-                      label="Customer message"
-                      value={message}
-                      onChange={(event) => setMessage(event.target.value)}
-                      multiline
-                      minRows={8}
-                      placeholder="Paste the unstructured customer request here..."
-                      fullWidth
-                    />
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">
+                      Try an example
+                    </Typography>
+                    <Stack direction="row" useFlexGap flexWrap="wrap" spacing={1} sx={{ mt: 1 }}>
+                      {sampleRequests.map((sample, index) => (
+                        <Chip
+                          key={sample.id}
+                          label={sample.title}
+                          variant="outlined"
+                          onClick={() => selectSample(index)}
+                          sx={{ "&:hover": { borderColor: "primary.main", color: "primary.main" } }}
+                        />
+                      ))}
+                    </Stack>
+                  </Box>
 
+                  <Stack direction="row" spacing={2} alignItems="center">
                     <Button
-                      size="large"
                       variant="contained"
+                      size="large"
                       disabled={!canSubmit}
                       onClick={analyze}
-                      startIcon={loading ? <CircularProgress size={18} color="inherit" /> : <SendRoundedIcon />}
-                      sx={{ py: 1.4, borderRadius: 2.5, fontWeight: 800 }}
+                      startIcon={loading ? <CircularProgress size={16} color="inherit" /> : null}
                     >
-                      {loading ? "Running workflow..." : "Analyze Request"}
+                      {loading ? "Analyzing..." : "Analyze request"}
                     </Button>
-
-                    {error && <Alert severity="error">{error}</Alert>}
-
-                    <Box>
-                      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.2 }}>
-                        <ScienceRoundedIcon fontSize="small" color="action" />
-                        <Typography variant="subtitle2" color="text.secondary" fontWeight={800}>ASSESSMENT TEST CASES</Typography>
-                      </Stack>
-                      <Stack spacing={1}>
-                        {sampleRequests.map((sample, index) => (
-                          <Button
-                            key={sample.id}
-                            variant="outlined"
-                            onClick={() => selectSample(index)}
-                            sx={{ justifyContent: "flex-start", textTransform: "none", textAlign: "left", py: 1, borderRadius: 2.5 }}
-                          >
-                            <Box>
-                              <Typography variant="body2" fontWeight={800}>{sample.id}. {sample.title}</Typography>
-                              <Typography variant="caption" color="text.secondary">{sample.source}</Typography>
-                            </Box>
-                          </Button>
-                        ))}
-                      </Stack>
-                    </Box>
+                    {loading && (
+                      <Typography variant="body2" color="text.secondary">
+                        Running the triage workflow...
+                      </Typography>
+                    )}
                   </Stack>
-                </Grid>
+                </Stack>
+              </Paper>
 
-                <Grid size={{ xs: 12, lg: 7 }}>
-                  {result ? (
-                    <ResultPanel result={result} />
-                  ) : (
-                    <Paper variant="outlined" sx={{ minHeight: 560, height: "100%", borderRadius: 4, display: "grid", placeItems: "center", p: 4, borderStyle: "dashed" }}>
-                      <Box textAlign="center" sx={{ maxWidth: 460 }}>
-                        <AutoAwesomeRoundedIcon color="primary" sx={{ fontSize: 52 }} />
-                        <Typography variant="h6" fontWeight={800} sx={{ mt: 1 }}>Your structured result will appear here</Typography>
-                        <Typography color="text.secondary" sx={{ mt: 1 }}>
-                          The response includes category, priority, confidence, extracted entities, urgency, destination queue, escalation status, and the receiving-team summary.
-                        </Typography>
-                      </Box>
-                    </Paper>
-                  )}
-                </Grid>
-              </Grid>
-            </Box>
+              {error && <Alert severity="error">{error}</Alert>}
+              {result && <ResultPanel result={result} />}
+            </Stack>
           ) : (
-            <Box sx={{ p: { xs: 2, md: 3 } }}>
-              <Stack spacing={2}>
-                <Box>
-                  <Typography variant="h6" fontWeight={800}>Processed requests</Typography>
-                  <Typography variant="body2" color="text.secondary">Stored locally in this browser for demo purposes. Click a row to reopen its detailed result.</Typography>
-                </Box>
-                <HistoryTable
-                  items={history}
-                  onSelect={(item) => {
-                    setResult(item);
-                    setSource(item.source);
-                    setMessage(item.rawMessage);
-                    setTab(0);
+            <Stack spacing={2}>
+              <HistoryList
+                items={history}
+                onSelect={(item) => {
+                  setResult(item);
+                  setSource(item.source);
+                  setMessage(item.rawMessage);
+                  setTab(0);
+                }}
+              />
+              {history.length > 0 && (
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={() => {
+                    localStorage.removeItem(HISTORY_KEY);
+                    setHistory([]);
                   }}
-                />
-                {history.length > 0 && (
-                  <Button
-                    color="inherit"
-                    onClick={() => {
-                      localStorage.removeItem(HISTORY_KEY);
-                      setHistory([]);
-                    }}
-                    sx={{ alignSelf: "flex-start" }}
-                  >
-                    Clear local history
-                  </Button>
-                )}
-              </Stack>
-            </Box>
+                  sx={{ alignSelf: "flex-start", color: "text.secondary" }}
+                >
+                  Clear history
+                </Button>
+              )}
+            </Stack>
           )}
-        </Paper>
-
-        <Alert severity="info" variant="outlined">
-          <strong>Architecture:</strong> the browser calls this Next.js app, and the Next.js server route forwards the request to n8n. Your LLM API key and n8n workflow remain outside the browser.
-        </Alert>
+        </Box>
       </Container>
-    </>
+    </ThemeProvider>
   );
 }
