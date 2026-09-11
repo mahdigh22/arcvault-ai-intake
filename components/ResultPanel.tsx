@@ -22,7 +22,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 
 export function ResultPanel({ result }: { result: AnalysisResult }) {
   const { classification, enrichment, routing, escalation } = result;
-  const identifiers = Object.entries(enrichment.identifiers ?? {});
+  const identifiers = enrichment.identifiers ?? [];
   const confidence = confidencePercent(classification.confidence);
   const priorityColor =
     classification.priority === "High" ? "error" : classification.priority === "Medium" ? "warning" : "default";
@@ -112,8 +112,8 @@ export function ResultPanel({ result }: { result: AnalysisResult }) {
         <Row label="Entities">
           {identifiers.length ? (
             <Stack direction="row" useFlexGap flexWrap="wrap" spacing={0.8}>
-              {identifiers.map(([key, value]) => (
-                <Chip key={key} size="small" variant="outlined" label={`${key}: ${String(value)}`} />
+              {identifiers.map((identifier) => (
+                <Chip key={identifier} size="small" variant="outlined" label={identifier} />
               ))}
             </Stack>
           ) : (

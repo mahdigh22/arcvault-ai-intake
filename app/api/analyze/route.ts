@@ -20,6 +20,17 @@ function toConfidence(value: unknown): number {
   return parsed > 1 ? parsed / 100 : parsed;
 }
 
+// The workflow sends identifiers as a ", "-joined string; older/nested payloads use an
+// array or an object. Split on comma + space so amounts like "$1,240" survive intact.
+function toIdentifiers(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map((entry) => String(entry).trim()).filter(Boolean);
+  if (typeof value === "string") return value.split(/,\s+/).map((entry) => entry.trim()).filter(Boolean);
+  if (value && typeof value === "object") {
+    return Object.entries(value).map(([key, entry]) => `${key}: ${entry}`);
+  }
+  return [];
+}
+
 function toBoolean(value: unknown): boolean {
   if (typeof value === "boolean") return value;
   return ["true", "yes", "1"].includes(String(value).trim().toLowerCase());
@@ -27,7 +38,6 @@ function toBoolean(value: unknown): boolean {
 
 // The webhook responds with one flat snake_case record; the UI works in nested camelCase.
 function fromFlatRecord(record: Record<string, unknown>): AnalysisResult {
-  const identifiers = record.identifiers;
   const priority = pickLabel<Priority>(record.priority, PRIORITIES, "Medium");
   const urgencySignal = typeof record.urgency_signal === "string" ? record.urgency_signal.trim() : "";
 
@@ -39,10 +49,7 @@ function fromFlatRecord(record: Record<string, unknown>): AnalysisResult {
     },
     enrichment: {
       coreIssue: String(record.core_issue ?? ""),
-      identifiers:
-        identifiers && typeof identifiers === "object" && !Array.isArray(identifiers)
-          ? (identifiers as AnalysisResult["enrichment"]["identifiers"])
-          : {},
+      identifiers: toIdentifiers(record.identifiers),
       // urgency_signal is usually a sentence ("Multiple users are impacted..."), not a level.
       // Only use it as the level when it really is one; otherwise priority carries the severity.
       urgency: pickLabel<Urgency>(urgencySignal, URGENCIES, priority),
@@ -99,7 +106,14 @@ function normalizeResult(payload: unknown): AnalysisResult {
   }
 
   const record = value as Record<string, unknown>;
-  const result = "classification" in record ? (value as AnalysisResult) : fromFlatRecord(record);
+  const parsed = "classification" in record ? (value as AnalysisResult) : fromFlatRecord(record);
+
+  // Nested payloads can still carry identifiers in any of the accepted shapes.
+  const result: AnalysisResult = {
+    ...parsed,
+    enrichment: { ...parsed.enrichment, identifiers: toIdentifiers(parsed.enrichment?.identifiers) },
+  };
+
   if (
     !result.classification?.category ||
     !result.classification?.priority ||

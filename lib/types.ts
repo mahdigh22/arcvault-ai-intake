@@ -26,7 +26,7 @@ export interface AnalysisResult {
   };
   enrichment: {
     coreIssue: string;
-    identifiers: Record<string, string | number | boolean | null>;
+    identifiers: string[];
     urgency: Urgency;
     // The workflow describes urgency in a sentence rather than a level; keep it for display.
     urgencySignal?: string;

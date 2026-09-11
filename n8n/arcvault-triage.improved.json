@@ -1,0 +1,505 @@
+{
+  "name": "ArcVault Intake & Triage Pipeline (improved)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "arcvault-triage",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "44f11da3-61fe-42ef-8ed5-3b2de4694536",
+      "name": "API Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        160,
+        96
+      ],
+      "webhookId": "81cfd5cb-f23d-48a5-8a97-8c0f425a5e07",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "0pUDTaAg4rzEp0Zn",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "source",
+              "name": "source",
+              "type": "string",
+              "value": "={{ (($json.body ? $json.body.source : $json.source) || '').toString().trim() }}"
+            },
+            {
+              "id": "raw_message",
+              "name": "raw_message",
+              "type": "string",
+              "value": "={{ (($json.body ? $json.body.raw_message : $json.raw_message) || '').toString().trim().slice(0, 8000) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "28341fb0-1205-429c-ac4c-38a84689ab20",
+      "name": "Prepare Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        380,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "len",
+              "leftValue": "={{ $json.raw_message.length }}",
+              "rightValue": 5,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0a1c7f52-8e2b-4a77-9f31-2c6d5b8e4a10",
+      "name": "Valid Input?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        600,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ error: 'raw_message is required and must be at least 5 characters.' }) }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "b2d9e41a-5c73-4f18-8a66-1d0e7c9b3f52",
+      "name": "Respond Bad Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        840,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are an intake triage assistant for a B2B software company called ArcVault. Analyze one inbound customer request and return a structured classification.\n\nRules:\n- category: choose exactly one of \"Bug Report\", \"Feature Request\", \"Billing Issue\", \"Technical Question\", \"Incident/Outage\". Use \"Incident/Outage\" when a live service is broken/unavailable for the customer (e.g. dashboard down, outage, multiple users affected). Use \"Bug Report\" for a defect affecting a single user or flow. Use \"Technical Question\" for how-to / evaluation / setup questions.\n- priority: \"Low\", \"Medium\", or \"High\" based on business impact and urgency.\n- confidence: a number between 0 and 1 for how certain you are of the category.\n- core_issue: the central problem or request in one clear sentence.\n- identifiers: an array of concrete identifiers quoted from the message. Include account IDs, usernames, email addresses, invoice numbers, error codes, URLs, monetary amounts and named products. Copy each one exactly as written, one per array element, and do not add labels or explanations. Return an empty array only when the message contains none.\n- urgency_signal: a short phrase describing why this is or isn't urgent, grounded in the message.\n- summary: a 2-3 sentence, human-readable summary for the receiving team, actionable without reading the raw message.\nBase every field only on the message content. Do not invent identifiers."
+            },
+            {
+              "content": "=Source: {{ $json.source }}\nMessage: {{ $json.raw_message }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 700,
+          "textFormat": {
+            "textOptions": {
+              "type": "json_schema",
+              "name": "triage_result",
+              "schema": "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"category\",\"priority\",\"confidence\",\"core_issue\",\"identifiers\",\"urgency_signal\",\"summary\"],\"properties\":{\"category\":{\"type\":\"string\",\"enum\":[\"Bug Report\",\"Feature Request\",\"Billing Issue\",\"Technical Question\",\"Incident/Outage\"]},\"priority\":{\"type\":\"string\",\"enum\":[\"Low\",\"Medium\",\"High\"]},\"confidence\":{\"type\":\"number\"},\"core_issue\":{\"type\":\"string\"},\"identifiers\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"urgency_signal\":{\"type\":\"string\"},\"summary\":{\"type\":\"string\"}}}",
+              "strict": true
+            }
+          },
+          "temperature": 0.2
+        }
+      },
+      "id": "89a9c129-095f-4204-b930-04d09b3ec4aa",
+      "name": "Classify & Enrich",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        840,
+        48
+      ],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "openAiApi": {
+          "id": null,
+          "name": "Gateway credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const orig = $('Prepare Input').item.json;\n\n// Unwrap the json_schema output from the Classify node.\nconst rawText = $json.output && $json.output[0] && $json.output[0].content && $json.output[0].content[0]\n  ? $json.output[0].content[0].text\n  : undefined;\n\nlet parsed = rawText;\nif (typeof parsed === 'string') {\n  // Throw rather than swallow: a parse failure must not become a fake \"low confidence\"\n  // record. The node's error output responds with 502 instead of storing junk.\n  parsed = JSON.parse(parsed);\n}\nif (!parsed || typeof parsed !== 'object') {\n  throw new Error('Classifier returned an unexpected shape: ' + JSON.stringify($json).slice(0, 300));\n}\n\nconst category = parsed.category || 'Technical Question';\nconst priority = parsed.priority || 'Medium';\nconst confidence = typeof parsed.confidence === 'number' ? parsed.confidence : 0;\nconst identifiers = Array.isArray(parsed.identifiers)\n  ? parsed.identifiers.map((entry) => String(entry).trim()).filter(Boolean)\n  : [];\nconst rawMessage = orig.raw_message || '';\nconst text = rawMessage.toLowerCase();\n\n// Step 4 - map classification to a destination queue.\nconst queueMap = {\n  'Bug Report': 'Engineering',\n  'Incident/Outage': 'Engineering',\n  'Feature Request': 'Product',\n  'Billing Issue': 'Billing',\n  'Technical Question': 'IT/Security',\n};\nlet routing_queue = queueMap[category] || 'General Triage';\n\n// Step 6 - human escalation criteria. Every rule below is deterministic and\n// evaluated independently of the model's own priority judgement.\nconst reasons = [];\n\nif (confidence < 0.7) reasons.push('Low confidence (<70%)');\n\nif (category === 'Incident/Outage' ||\n    /\\boutage\\b|\\bdown for (all|multiple) users\\b|\\bmultiple users (are )?(affected|impacted)\\b|\\bproduction (is )?down\\b/.test(text)) {\n  reasons.push('Outage / incident signal');\n}\n\n// Explicit critical wording, regardless of the predicted category.\nif (/\\b(urgent|asap|critical|emergency|data loss|security breach|breach|locked out)\\b/.test(text)) {\n  reasons.push('Critical wording in message');\n}\n\n// Billing threshold. The amount scan runs on every message so a misclassification\n// cannot bypass the rule; a billing context check keeps it from firing on stray sums.\nconst amounts = (rawMessage.match(/\\$\\s?[\\d,]+(?:\\.\\d+)?/g) || [])\n  .map((a) => parseFloat(a.replace(/[$,\\s]/g, '')))\n  .filter((n) => !isNaN(n));\nconst maxAmt = amounts.length ? Math.max(...amounts) : 0;\nconst billingContext = category === 'Billing Issue' || /invoice|charge|billed|billing|refund|payment|contract rate/.test(text);\nif (maxAmt > 500 && billingContext) {\n  reasons.push('Billing amount over $500 ($' + maxAmt + ')');\n}\n\nconst escalation_flag = reasons.length > 0;\nif (escalation_flag) routing_queue = 'Human Escalation';\n\nreturn [{\n  json: {\n    source: orig.source || '',\n    raw_message: rawMessage,\n    category,\n    priority,\n    confidence,\n    core_issue: parsed.core_issue || '',\n    // Kept as an array here; the Data Table node joins it for its string column.\n    identifiers,\n    urgency_signal: parsed.urgency_signal || '',\n    routing_queue,\n    escalation_flag,\n    escalation_reason: reasons.join('; '),\n    summary: parsed.summary || '',\n    processed_at: new Date().toISOString(),\n  },\n}];"
+      },
+      "id": "53b76baf-91ac-4534-ad00-07ae565478cb",
+      "name": "Route & Escalate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1060,
+        48
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "0YfPkmIJX9FobLNd",
+          "cachedResultName": "ArcVault Triage Records"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "source": "={{ $json.source }}",
+            "raw_message": "={{ $json.raw_message }}",
+            "category": "={{ $json.category }}",
+            "priority": "={{ $json.priority }}",
+            "confidence": "={{ $json.confidence }}",
+            "core_issue": "={{ $json.core_issue }}",
+            "identifiers": "={{ $json.identifiers.join(', ') }}",
+            "urgency_signal": "={{ $json.urgency_signal }}",
+            "routing_queue": "={{ $json.routing_queue }}",
+            "escalation_flag": "={{ $json.escalation_flag }}",
+            "escalation_reason": "={{ $json.escalation_reason }}",
+            "summary": "={{ $json.summary }}",
+            "processed_at": "={{ $json.processed_at }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "raw_message",
+              "displayName": "raw_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "category",
+              "displayName": "category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "priority",
+              "displayName": "priority",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "confidence",
+              "displayName": "confidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "core_issue",
+              "displayName": "core_issue",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "identifiers",
+              "displayName": "identifiers",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "urgency_signal",
+              "displayName": "urgency_signal",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "routing_queue",
+              "displayName": "routing_queue",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "escalation_flag",
+              "displayName": "escalation_flag",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "escalation_reason",
+              "displayName": "escalation_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "processed_at",
+              "displayName": "processed_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "e7f2ae5c-b80a-4044-9e0a-92cbd6e4ccf5",
+      "name": "Save Triage Record",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1280,
+        48
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($(\"Route & Escalate\").item.json) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "cc4df4da-7b85-4225-8227-666882722472",
+      "name": "Respond to App",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1500,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ error: 'Triage failed upstream.', detail: ($json.error && $json.error.message) ? $json.error.message : 'Unknown workflow error' }) }}",
+        "options": {
+          "responseCode": 502
+        }
+      },
+      "id": "f31b8c07-6ad2-4e95-b1c4-70e2a5d6b884",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1280,
+        272
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "API Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Input": {
+      "main": [
+        [
+          {
+            "node": "Valid Input?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid Input?": {
+      "main": [
+        [
+          {
+            "node": "Classify & Enrich",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Bad Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify & Enrich": {
+      "main": [
+        [
+          {
+            "node": "Route & Escalate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route & Escalate": {
+      "main": [
+        [
+          {
+            "node": "Save Triage Record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Triage Record": {
+      "main": [
+        [
+          {
+            "node": "Respond to App",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "nodeGroups": [
+    {
+      "id": "5e61ab6b-2fd1-4d77-889d-ccf4eb5417eb",
+      "name": "AI Triage",
+      "nodeIds": [
+        "89a9c129-095f-4204-b930-04d09b3ec4aa",
+        "53b76baf-91ac-4534-ad00-07ae565478cb"
+      ],
+      "description": "LLM classifies and enriches the request; code applies deterministic routing and escalation rules."
+    },
+    {
+      "id": "e2bcceeb-e937-4e40-821f-b77ef56b3699",
+      "name": "Storage & Response",
+      "nodeIds": [
+        "e7f2ae5c-b80a-4044-9e0a-92cbd6e4ccf5",
+        "cc4df4da-7b85-4225-8227-666882722472",
+        "f31b8c07-6ad2-4e95-b1c4-70e2a5d6b884",
+        "b2d9e41a-5c73-4f18-8a66-1d0e7c9b3f52"
+      ],
+      "description": "Stores every record in the Data Table and always returns a response: 200 on success, 400 on invalid input, 502 on upstream failure."
+    }
+  ],
+  "tags": []
+}
