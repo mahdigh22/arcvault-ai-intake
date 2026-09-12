@@ -6,7 +6,9 @@ A small Next.js + TypeScript + MUI frontend for the Valsoft AI Engineer assessme
 
 - One-screen customer request intake form
 - The exact five synthetic assessment messages as one-click test cases
-- Source selection: Email, Web Form, Support Portal
+- Source selection: Web Form, Support Portal (`Email` is reserved for the n8n
+  Gmail trigger, so the `source` column tells real inbox mail apart from a form
+  submission at a glance)
 - Analysis result view showing:
   - Category
   - Priority
@@ -56,10 +58,15 @@ this JSON to n8n:
 
 ```json
 {
-  "source": "Email",
+  "source": "Web Form",
   "raw_message": "Hi, I tried logging in this morning and keep getting a 403 error..."
 }
 ```
+
+The workflow has a second trigger: a **Gmail Trigger** feeding a `Normalize Email`
+node into the same `Prepare Input` step. Mail arriving in the linked inbox is
+classified by the identical pipeline and stored with `source: "Email"`. Those runs
+have no HTTP caller, so a `Came from API?` check skips the response node.
 
 ## 3. Required n8n response contract
 
@@ -67,7 +74,7 @@ Configure your final **Respond to Webhook** node to return one flat JSON object:
 
 ```json
 {
-  "source": "Email",
+  "source": "Web Form",
   "raw_message": "...",
   "category": "Bug Report",
   "priority": "Medium",

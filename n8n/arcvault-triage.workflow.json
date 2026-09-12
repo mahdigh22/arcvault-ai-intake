@@ -67,6 +67,162 @@
     },
     {
       "parameters": {
+        "content": "## Step 1b · Email Intake\nA second door into the same pipeline. **Gmail Trigger** polls the support inbox every minute; swap it for **Email Trigger (IMAP)** on a non-Google mailbox.\n\n**Normalize Email** flattens the Gmail/IMAP field differences, strips HTML and quoted reply history, and folds the subject into the classified text — then hands `source` + `raw_message` to the *same* Prepare Input node the API uses.\n\n**Manual Trigger + Sample Email** lets the email path be demoed without a live mailbox.",
+        "height": 180,
+        "width": 700,
+        "color": 6
+      },
+      "id": "n4",
+      "name": "Note - Step 1b",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-540, 300]
+    },
+    {
+      "parameters": {
+        "content": "## Reply only to a real caller\nThe workflow now has two triggers but only one of them is waiting for an HTTP response.\n\n**Came from API?** tests `$('API Webhook').isExecuted`, so **Respond to App** fires for webhook callers and the email path finishes silently instead. The record is already stored either way — the response node is the last step, not the one that persists.",
+        "height": 180,
+        "width": 460,
+        "color": 5
+      },
+      "id": "n5",
+      "name": "Note - Response Guard",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1820, 580]
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "filters": {
+          "labelIds": ["INBOX"],
+          "q": "from:mohamadmahdi.ghoussein@gmail.com",
+          "readStatus": "unread"
+        }
+      },
+      "id": "e1000000-0000-4000-8000-000000000001",
+      "name": "Gmail Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [-520, 500],
+      "notes": "Polls every minute for unread INBOX mail matching filters.q. Keep a q scope (from:/to:) so unrelated inbox mail never reaches the classifier.",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "3Gt9Io148O4dmyUv",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "e1000000-0000-4000-8000-000000000002",
+      "name": "Manual Trigger (Demo)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-520, 680]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "from",
+              "name": "From",
+              "type": "string",
+              "value": "Dana Whitfield <dana.whitfield@northlinelogistics.com>"
+            },
+            {
+              "id": "subject",
+              "name": "Subject",
+              "type": "string",
+              "value": "URGENT: dashboard unavailable for our whole team"
+            },
+            {
+              "id": "text",
+              "name": "text",
+              "type": "string",
+              "value": "Our entire team has been unable to load the ArcVault dashboard since about 08:15 UTC. We get a spinning loader and then a 504. This affects all 14 users on account NL-44821 and we cannot process today's shipments. Please treat this as critical.\n\n--\nDana Whitfield\nOps Manager, Northline Logistics"
+            },
+            {
+              "id": "id",
+              "name": "id",
+              "type": "string",
+              "value": "demo-message-0001"
+            },
+            {
+              "id": "threadId",
+              "name": "threadId",
+              "type": "string",
+              "value": "demo-thread-0001"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000003",
+      "name": "Sample Email (Test)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [-320, 680],
+      "notes": "Mimics one Gmail Trigger item so the email path can be demoed without a live mailbox."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Email intake adapter. Accepts a Gmail Trigger item (simplified or raw) or an\n// Email Trigger (IMAP) item and emits { source, raw_message } at the root -\n// exactly the shape Prepare Input already falls back to, so the API path and the\n// email path converge on one validated pipeline instead of two.\n\nconst j = $json;\n\nconst stripHtml = (html) => String(html)\n  .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')\n  .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')\n  .replace(/<br\\s*\\/?>/gi, '\\n')\n  .replace(/<\\/p>/gi, '\\n')\n  .replace(/<[^>]+>/g, ' ')\n  .replace(/&nbsp;/g, ' ')\n  .replace(/&amp;/g, '&')\n  .replace(/&lt;/g, '<')\n  .replace(/&gt;/g, '>')\n  .replace(/&quot;/g, '\"')\n  .replace(/&#39;/g, \"'\");\n\n// Gmail Trigger        -> From / Subject / text / html\n// Email Trigger (IMAP) -> from / subject / textPlain / textHtml\nconst subject = (j.Subject ?? j.subject ?? '').toString().trim();\nconst from = (\n  j.From ??\n  (j.from && j.from.value && j.from.value[0] && j.from.value[0].address) ??\n  (j.from && j.from.text) ??\n  j.from ??\n  ''\n).toString().trim();\n\nconst plain = j.text ?? j.textPlain ?? '';\nconst html = j.html ?? j.textHtml ?? '';\nlet body = (plain || (html ? stripHtml(html) : '') || j.snippet || '').toString();\n\n// Drop quoted reply history and the signature block: on a long thread the\n// classifier would otherwise triage the oldest message rather than this reply.\nbody = body\n  .replace(/\\r\\n/g, '\\n')\n  .split(/^\\s*(?:On .+wrote:|-{2,}\\s*Original Message\\s*-{2,}|_{10,})\\s*$/m)[0]\n  .split(/\\n--\\s*\\n/)[0]\n  .split('\\n')\n  .map((line) => line.trim())\n  .join('\\n')\n  .replace(/\\n{3,}/g, '\\n\\n')\n  .trim();\n\n// The subject line carries real triage signal (\"URGENT: dashboard down\"), so it\n// is classified text rather than metadata. Prepare Input applies the 8 000\n// character cap, so that limit stays defined in exactly one place.\nconst raw_message = [subject ? 'Subject: ' + subject : '', body]\n  .filter(Boolean)\n  .join('\\n\\n');\n\n// Machine mail must never reach the classifier: it burns tokens and writes\n// triage records no human ever sent. Acted on by the next node.\nconst is_automated =\n  /(no-?reply|do-?not-?reply|mailer-daemon|postmaster|bounce[s]?@)/i.test(from) ||\n  /^\\s*(out of office|automatic reply|auto[- ]reply|undeliverable|delivery status notification)/i.test(subject);\n\n// 'Email' belongs to this path alone. The web form offers only 'Web Form' and\n// 'Support Portal', so this label always means a message that genuinely arrived\n// in the mailbox rather than one pasted into the form.\nreturn [{\n  json: {\n    source: 'Email',\n    raw_message,\n    from,\n    subject,\n    message_id: (j.id ?? j.messageId ?? '').toString(),\n    thread_id: (j.threadId ?? '').toString(),\n    is_automated,\n  },\n}];"
+      },
+      "id": "e1000000-0000-4000-8000-000000000004",
+      "name": "Normalize Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-120, 580]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "human",
+              "leftValue": "={{ $json.is_automated }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000005",
+      "name": "Real Customer Email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [100, 580]
+    },
+    {
+      "parameters": {},
+      "id": "e1000000-0000-4000-8000-000000000006",
+      "name": "Ignore Automated Mail",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [340, 760]
+    },
+    {
+      "parameters": {
         "httpMethod": "POST",
         "path": "arcvault-triage",
         "authentication": "headerAuth",
@@ -166,7 +322,9 @@
       "position": [
         880,
         500
-      ]
+      ],
+      "onError": "continueRegularOutput",
+      "notes": "Non-fatal: an email-triggered run has no caller to reject, so a missing HTTP response is not an error here."
     },
     {
       "parameters": {
@@ -271,8 +429,8 @@
         "dataTableId": {
           "__rl": true,
           "mode": "id",
-          "value": "0YfPkmIJX9FobLNd",
-          "cachedResultName": "ArcVault Triage Records"
+          "value": "yubxdCP8Tfo932uE",
+          "cachedResultName": "ArcVault Escalation Queue"
         },
         "columns": {
           "mappingMode": "defineBelow",
@@ -632,10 +790,47 @@
       "name": "Respond to App",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
-      "position": [
-        1840,
-        280
-      ]
+      "position": [2080, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "fromApi",
+              "leftValue": "={{ $('API Webhook').isExecuted }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000007",
+      "name": "Came from API?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [1840, 290],
+      "notes": "Only a webhook-triggered run has an HTTP caller waiting for a response."
+    },
+    {
+      "parameters": {},
+      "id": "e1000000-0000-4000-8000-000000000008",
+      "name": "Email Run Complete",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [2080, 460]
     },
     {
       "parameters": {
@@ -652,7 +847,9 @@
       "position": [
         1120,
         500
-      ]
+      ],
+      "onError": "continueRegularOutput",
+      "notes": "Non-fatal: an email-triggered run has no caller to inform, so a missing HTTP response is not an error here."
     }
   ],
   "pinData": {},
@@ -662,6 +859,68 @@
         [
           {
             "node": "Prepare Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger (Demo)": {
+      "main": [
+        [
+          {
+            "node": "Sample Email (Test)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sample Email (Test)": {
+      "main": [
+        [
+          {
+            "node": "Normalize Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Email": {
+      "main": [
+        [
+          {
+            "node": "Real Customer Email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Real Customer Email?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ignore Automated Mail",
             "type": "main",
             "index": 0
           }
@@ -755,7 +1014,7 @@
       "main": [
         [
           {
-            "node": "Respond to App",
+            "node": "Came from API?",
             "type": "main",
             "index": 0
           }
@@ -766,7 +1025,25 @@
       "main": [
         [
           {
+            "node": "Came from API?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Came from API?": {
+      "main": [
+        [
+          {
             "node": "Respond to App",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Email Run Complete",
             "type": "main",
             "index": 0
           }
@@ -774,12 +1051,25 @@
       ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
   "nodeGroups": [
+    {
+      "id": "c4a71f0e-9d32-4b58-9a1c-2f6e8d40b117",
+      "name": "Email Intake",
+      "nodeIds": [
+        "e1000000-0000-4000-8000-000000000001",
+        "e1000000-0000-4000-8000-000000000002",
+        "e1000000-0000-4000-8000-000000000003",
+        "e1000000-0000-4000-8000-000000000004",
+        "e1000000-0000-4000-8000-000000000005",
+        "e1000000-0000-4000-8000-000000000006"
+      ],
+      "description": "Second intake channel. Normalises Gmail/IMAP mail into the same source + raw_message contract the API webhook delivers, and drops automated mail before it reaches the classifier."
+    },
     {
       "id": "5e61ab6b-2fd1-4d77-889d-ccf4eb5417eb",
       "name": "AI Triage",
@@ -796,9 +1086,11 @@
         "1b09b5d5-4670-4410-abbb-601c67e97bf4",
         "e7f2ae5c-b80a-4044-9e0a-92cbd6e4ccf5",
         "d7220a03-eee5-4a16-9e77-be6a5498b124",
-        "cc4df4da-7b85-4225-8227-666882722472"
+        "e1000000-0000-4000-8000-000000000007",
+        "cc4df4da-7b85-4225-8227-666882722472",
+        "e1000000-0000-4000-8000-000000000008"
       ],
-      "description": "Routes escalated records to the human review queue, stores every record, and returns the triage result to API callers."
+      "description": "Routes escalated records to the human review queue, stores every record, and returns the triage result to API callers only — an email-triggered run has no caller to answer."
     }
   ],
   "tags": []

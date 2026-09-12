@@ -4,7 +4,7 @@ export const sampleRequests: Array<AnalyzeRequest & { id: number; title: string 
   {
     id: 1,
     title: "Login 403 after update",
-    source: "Email",
+    source: "Support Portal",
     message:
       "Hi, I tried logging in this morning and keep getting a 403 error. My account is arcvault.io/user/jsmith. This started after your update last Tuesday.",
   },
@@ -25,7 +25,7 @@ export const sampleRequests: Array<AnalyzeRequest & { id: number; title: string 
   {
     id: 4,
     title: "Okta SSO setup",
-    source: "Email",
+    source: "Web Form",
     message:
       "I'm not sure if this is the right place to ask, but is there a way to set up SSO with Okta? We're evaluating switching our auth provider.",
   },

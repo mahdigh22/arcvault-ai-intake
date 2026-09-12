@@ -26,10 +26,10 @@ import { ResultPanel } from "@/components/ResultPanel";
 import { HistoryList } from "@/components/HistoryList";
 
 const HISTORY_KEY = "arcvault-analysis-history";
-const SOURCES: Source[] = ["Email", "Web Form", "Support Portal"];
+const SOURCES: Source[] = ["Web Form", "Support Portal"];
 
 export default function HomePage() {
-  const [source, setSource] = useState<Source>("Email");
+  const [source, setSource] = useState<Source>("Web Form");
   const [message, setMessage] = useState("");
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);

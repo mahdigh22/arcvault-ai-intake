@@ -9,7 +9,10 @@ export const CATEGORIES = [
 export type Category = (typeof CATEGORIES)[number];
 export type Priority = "Low" | "Medium" | "High";
 export type Urgency = "Low" | "Medium" | "High";
-export type Source = "Email" | "Web Form" | "Support Portal";
+// "Email" is deliberately absent: it is reserved for records the n8n Gmail
+// trigger creates from the real mailbox, so the intake channel stays readable
+// in the triage table. The form cannot claim it.
+export type Source = "Web Form" | "Support Portal";
 
 export interface AnalyzeRequest {
   source: Source;
